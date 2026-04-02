@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Airplane Pilot View Simulator</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; color: white; font-family: sans-serif; }
+        canvas { display: block; }
+        .instructions { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div class="instructions">
+        Move Mouse Up/Down: Pitch<br>
+        Move Mouse Left/Right: Roll
+    </div>
+    <canvas id="flightCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('flightCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let mouseX = 0;
+    let mouseY = 0;
+
+    // Set canvas size
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Track mouse movement
+    window.addEventListener('mousemove', (e) => {
+        // Normalize mouse positions to range -1 to 1
+        mouseX = (e.clientX / canvas.width) * 2 - 1;
+        mouseY = (e.clientY / canvas.height) * 2 - 1;
+    });
+
+    // Create some "distant objects" (stars/points)
+    const objects = [];
+    for(let i = 0; i < 100; i++) {
+        objects.push({
+            x: (Math.random() - 0.5) * canvas.width * 2,
+            y: (Math.random() - 0.5) * canvas.height * 2
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        // Pitch effect: vertical offset
+        const pitchOffset = mouseY * 200;
+        
+        // Roll effect: rotation angle (in radians)
+        const rollAngle = mouseX * (Math.PI / 4); // Max 45 degree roll
+
+        ctx.save();
+        
+        // 1. Move to center to rotate around pilot's view
+        ctx.translate(centerX, centerY);
+        
+        // 2. Apply Roll (Rotation)
+        // We rotate -rollAngle because if the plane rolls right, 
+        // the horizon appears to tilt left.
+        ctx.rotate(-rollAngle);
+
+        // 3. Apply Pitch (Translation)
+        ctx.translate(0, pitchOffset);
+
+        // Draw the horizon line
+        ctx.strokeStyle = '#00ff00';
+        ctx.beginPath();
+        ctx.moveTo(-canvas.width, 0);
+        ctx.lineTo(canvas.width, 0);
+        ctx.stroke();
+
+        // Draw distant objects
+        ctx.fillStyle = 'white';
+        objects.forEach(obj => {
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        ctx.restore();
+
+        // Draw a static HUD (Heads-Up Display) crosshair
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX - 20, centerY); ctx.lineTo(centerX + 20, centerY);
+        ctx.moveTo(centerX, centerY - 20); ctx.lineTo(centerX, centerY + 20);
+        ctx.stroke();
+
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+</script>
+</body>
+</html>
