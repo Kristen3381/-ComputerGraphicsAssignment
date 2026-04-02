@@ -1,143 +1,143 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Flight Simulator - Final Assignment Build</title>
+    <title>Pro Flight Sim - Laura's Build</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #4facfe; cursor: crosshair; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
         canvas { display: block; }
-        #overlay {
-            position: absolute; bottom: 20px; width: 100%;
-            text-align: center; color: rgba(255,255,255,0.7);
-            font-family: monospace; pointer-events: none;
+        .stats {
+            position: absolute; top: 20px; right: 20px;
+            color: #0f0; text-align: right; pointer-events: none;
+            text-shadow: 0 0 5px #0f0;
         }
     </style>
 </head>
 <body>
-    <div id="overlay">INSTRUMENTS: ACTIVE | STATUS: STABLE</div>
+    <div class="stats" id="ui">
+        ALT: 12,400 FT<br>
+        SPD: 340 KTS<br>
+        HDG: 270°
+    </div>
     <canvas id="flightCanvas"></canvas>
 
 <script>
     const canvas = document.getElementById('flightCanvas');
     const ctx = canvas.getContext('2d');
-
     let mouseX = 0, mouseY = 0;
+
+    // Object types: 0 = House, 1 = Tree
+    const groundObjects = Array.from({ length: 40 }, () => ({
+        x: (Math.random() - 0.5) * 4000,
+        y: Math.random() * 2000,
+        type: Math.floor(Math.random() * 2),
+        color: `hsl(${100 + Math.random() * 40}, 30%, ${20 + Math.random() * 20}%)`
+    }));
+
+    window.addEventListener('mousemove', (e) => {
+        mouseX = (e.clientX / canvas.width) * 2 - 1;
+        mouseY = (e.clientY / canvas.height) * 2 - 1;
+    });
 
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
     }
     window.addEventListener('resize', resize);
-    window.addEventListener('mousemove', (e) => {
-        // Normalize mouse to -1 to +1 range
-        mouseX = (e.clientX / canvas.width) * 2 - 1;
-        mouseY = (e.clientY / canvas.height) * 2 - 1;
-    });
     resize();
 
-    // Generate distant objects (stars/lights) for "depth"
-    const distantObjects = Array.from({ length: 80 }, () => ({
-        x: (Math.random() - 0.5) * 3000,
-        y: (Math.random() - 0.5) * 2000,
-        size: 1 + Math.random() * 2,
-        speedFactor: 0.4 + Math.random() * 0.8 // Different speeds for 2D depth
-    }));
-
-    // Function to draw a soft, realistic cloud
-    function drawCloud(x, y, radius) {
-        const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
-        grad.addColorStop(0.6, 'rgba(255, 255, 255, 0.2)');
-        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
+    function drawHouse(x, y, size, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x - size/2, y - size, size, size); // Base
+        ctx.fillStyle = '#333';
+        ctx.beginPath(); // Roof
+        ctx.moveTo(x - size/1.8, y - size);
+        ctx.lineTo(x + size/1.8, y - size);
+        ctx.lineTo(x, y - size * 1.5);
         ctx.fill();
     }
 
-    function animate() {
+    function drawTree(x, y, size) {
+        ctx.fillStyle = '#4a2f1b';
+        ctx.fillRect(x - size/10, y - size/2, size/5, size/2); // Trunk
+        ctx.fillStyle = '#2d5a27';
+        ctx.beginPath();
+        ctx.arc(x, y - size, size/1.5, 0, Math.PI * 2); // Leaves
+        ctx.fill();
+    }
+
+    function draw() {
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
+        const roll = mouseX * 0.6;
+        const pitch = mouseY * 450;
 
-        // Controls
-        const roll = mouseX * 0.7; // Max ~40 degree roll
-        const pitch = mouseY * 500; // Vertical displacement
-
-        // 1. Draw Sky (Static Background)
+        // 1. Sky & Atmospheric Perspective
         const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        skyGrad.addColorStop(0, '#0052D4');
-        skyGrad.addColorStop(1, '#6FB1FC');
+        skyGrad.addColorStop(0, '#001524');
+        skyGrad.addColorStop(0.5, '#1565C0');
+        skyGrad.addColorStop(1, '#64B5F6');
         ctx.fillStyle = skyGrad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 2. Transform the "World" (Clouds, Ground, Objects)
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(-roll);
         ctx.translate(0, pitch);
 
-        // Draw the Ground (Darker blue/green for land/sea)
-        ctx.fillStyle = '#1e3c72';
-        // We draw a massive rectangle starting at the horizon line (y=0)
+        // 2. Ground Plane
+        ctx.fillStyle = '#1b3a1b'; 
         ctx.fillRect(-5000, 0, 10000, 5000);
 
-        // Draw the Horizon Glow
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(-5000, 0); ctx.lineTo(5000, 0);
-        ctx.stroke();
+        // 3. Render Real-Life Objects (Houses & Trees)
+        groundObjects.forEach(obj => {
+            // Distance scaling: objects further from horizon look smaller
+            const scale = Math.max(0.1, obj.y / 500); 
+            const screenX = obj.x;
+            const screenY = obj.y;
 
-        // Draw "Real" Clouds
-        drawCloud(-600, -300, 200);
-        drawCloud(500, -150, 250);
-        drawCloud(100, -500, 180);
-        drawCloud(-200, 400, 220); // This cloud is "below" us
-
-        // Draw Distant Objects with Parallax
-        ctx.fillStyle = "white";
-        distantObjects.forEach(obj => {
-            // Apply unique pitch response to each object
-            const parallaxY = obj.y + (pitch * (obj.speedFactor - 1));
-            ctx.beginPath();
-            ctx.arc(obj.x, parallaxY, obj.size, 0, Math.PI * 2);
-            ctx.fill();
+            if (obj.type === 0) drawHouse(screenX, screenY, 30 * scale, obj.color);
+            else drawTree(screenX, screenY, 40 * scale);
         });
+
+        // 4. Horizon Haze (Makes it look "Real")
+        const haze = ctx.createLinearGradient(0, -100, 0, 300);
+        haze.addColorStop(0, 'rgba(100, 181, 246, 1)');
+        haze.addColorStop(1, 'rgba(100, 181, 246, 0)');
+        ctx.fillStyle = haze;
+        ctx.fillRect(-5000, -100, 10000, 400);
 
         ctx.restore();
 
-        // 3. Draw Static Cockpit HUD (Doesn't move with the plane)
-        drawHUD(cx, cy);
+        // 5. Functional HUD
+        drawHUD(cx, cy, roll, pitch);
 
-        requestAnimationFrame(animate);
+        requestAnimationFrame(draw);
     }
 
-    function drawHUD(cx, cy) {
-        ctx.strokeStyle = '#00ff00';
+    function drawHUD(cx, cy, roll, pitch) {
+        ctx.strokeStyle = '#0f0';
+        ctx.fillStyle = '#0f0';
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 5;
-        ctx.shadowColor = '#00ff00';
+        ctx.font = '12px Courier New';
 
-        // Center Aiming Reticle
+        // Roll Indicator (Arc at the top)
         ctx.beginPath();
-        ctx.arc(cx, cy, 10, 0, Math.PI * 2);
-        ctx.moveTo(cx - 40, cy); ctx.lineTo(cx - 15, cy);
-        ctx.moveTo(cx + 15, cy); ctx.lineTo(cx + 40, cy);
+        ctx.arc(cx, cy, 150, Math.PI + 0.5, Math.PI * 2 - 0.5);
         ctx.stroke();
-        
-        // Pitch Ladder Bars
-        for(let i = -3; i <= 3; i++) {
-            if(i === 0) continue;
-            let y = cy + (i * 80);
-            ctx.beginPath();
-            ctx.moveTo(cx - 60, y); ctx.lineTo(cx - 30, y);
-            ctx.moveTo(cx + 30, y); ctx.lineTo(cx + 60, y);
-            ctx.stroke();
-        }
-        ctx.shadowBlur = 0;
+
+        // Target Reticle
+        ctx.beginPath();
+        ctx.moveTo(cx - 20, cy); ctx.lineTo(cx - 5, cy);
+        ctx.moveTo(cx + 5, cy); ctx.lineTo(cx + 20, cy);
+        ctx.moveTo(cx, cy - 5); ctx.lineTo(cx, cy + 5);
+        ctx.stroke();
+
+        // Pitch Data
+        ctx.fillText(`PITCH: ${Math.round(pitch/10)}°`, cx + 60, cy - 60);
+        ctx.fillText(`ROLL:  ${Math.round(roll * 57.3)}°`, cx + 60, cy - 45);
     }
 
-    animate();
+    draw();
 </script>
 </body>
 </html>
