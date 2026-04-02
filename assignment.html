@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pro Flight Sim - Pilot Perspective</title>
+    <title>Advanced Flight Sim - Laura's Build</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; cursor: crosshair; }
         canvas { display: block; }
@@ -24,13 +24,21 @@
     const canvas = document.getElementById('flightCanvas');
     const ctx = canvas.getContext('2d');
     let mouseX = 0, mouseY = 0;
+    let frame = 0;
 
-    // Generate random real-life objects (Houses and Trees)
-    const groundObjects = Array.from({ length: 50 }, () => ({
+    // Generate random objects and clouds
+    const groundObjects = Array.from({ length: 40 }, () => ({
         x: (Math.random() - 0.5) * 5000,
-        z: Math.random() * 3000, // Z represents distance/depth
+        z: Math.random() * 3000,
         type: Math.random() > 0.4 ? 'tree' : 'house',
-        color: `hsl(${20 + Math.random() * 20}, 40%, ${30 + Math.random() * 20}%)` // Earthy tones
+        color: `hsl(${20 + Math.random() * 20}, 30%, ${25 + Math.random() * 15}%)`
+    }));
+
+    const clouds = Array.from({ length: 10 }, () => ({
+        x: (Math.random() - 0.5) * 4000,
+        y: -200 - Math.random() * 500,
+        z: Math.random() * 2000,
+        size: 150 + Math.random() * 200
     }));
 
     window.addEventListener('mousemove', (e) => {
@@ -45,143 +53,108 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // --- Drawing Helpers ---
-
-    function drawHouse(x, y, size, scale) {
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fillRect(x, y, size * 1.5, size * 0.2);
+    function drawCloud(x, y, z, size, pitch, roll) {
+        const scale = 500 / (500 + z);
+        const screenX = x * scale;
+        const screenY = y * scale;
         
-        // Building Base
-        ctx.fillStyle = '#bdc3c7';
-        ctx.fillRect(x - size/2, y - size, size, size);
+        const grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, size * scale);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
         
-        // Roof
-        ctx.fillStyle = '#c0392b';
+        ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.moveTo(x - size/1.6, y - size);
-        ctx.lineTo(x + size/1.6, y - size);
-        ctx.lineTo(x, y - size * 1.6);
+        ctx.arc(screenX, screenY, size * scale, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    function drawTree(x, y, size) {
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.beginPath();
-        ctx.ellipse(x + 5, y, size/2, size/5, 0, 0, Math.PI*2);
-        ctx.fill();
+    function drawAirplaneNose(cx, cy, roll, pitch) {
+        // Simulating the plane "reacting" to the pilot's input
+        // The nose shifts slightly opposite to the movement
+        const recoilX = roll * 20; 
+        const recoilY = (pitch / 400) * 30;
+        const vibration = Math.sin(frame * 0.5) * 1.5; // Engine shake
 
-        // Trunk
-        ctx.fillStyle = '#5d4037';
-        ctx.fillRect(x - size/10, y - size/2, size/5, size/2);
-        
-        // Foliage
-        ctx.fillStyle = '#2e7d32';
-        ctx.beginPath();
-        ctx.arc(x, y - size * 0.8, size/1.5, 0, Math.PI * 2);
-        ctx.fill();
-    }
+        const noseW = 450;
+        const metalGrad = ctx.createLinearGradient(cx - noseW/2 + recoilX, 0, cx + noseW/2 + recoilX, 0);
+        metalGrad.addColorStop(0, '#1c2833');
+        metalGrad.addColorStop(0.5, '#7f8c8d');
+        metalGrad.addColorStop(1, '#1c2833');
 
-    function drawAirplaneNose(cx, cy) {
-        // 1. Exterior Nose (The metallic part outside the glass)
-        const noseW = 400;
-        const metalGrad = ctx.createLinearGradient(cx - noseW/2, 0, cx + noseW/2, 0);
-        metalGrad.addColorStop(0, '#2c3e50');
-        metalGrad.addColorStop(0.5, '#bdc3c7');
-        metalGrad.addColorStop(1, '#2c3e50');
+        ctx.save();
+        ctx.translate(recoilX, recoilY + vibration);
 
+        // Exterior Nose
         ctx.fillStyle = metalGrad;
         ctx.beginPath();
         ctx.moveTo(cx - noseW/2, canvas.height);
-        ctx.quadraticCurveTo(cx, cy + 150, cx + noseW/2, canvas.height);
+        ctx.quadraticCurveTo(cx, cy + 180, cx + noseW/2, canvas.height);
         ctx.fill();
 
-        // 2. Interior Dashboard (Bottom frame)
-        ctx.fillStyle = '#111';
+        // Interior Dash
+        ctx.fillStyle = '#0a0a0a';
         ctx.beginPath();
-        ctx.moveTo(0, canvas.height);
-        ctx.lineTo(0, canvas.height - 100);
-        ctx.quadraticCurveTo(cx, canvas.height - 150, canvas.width, canvas.height - 100);
-        ctx.lineTo(canvas.width, canvas.height);
+        ctx.moveTo(-100, canvas.height);
+        ctx.lineTo(-100, canvas.height - 120);
+        ctx.quadraticCurveTo(cx, canvas.height - 160, canvas.width + 100, canvas.height - 120);
+        ctx.lineTo(canvas.width + 100, canvas.height);
         ctx.fill();
         
-        // Dash detail line
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 5;
-        ctx.stroke();
+        ctx.restore();
     }
-
-    function drawHUD(cx, cy, roll, pitch) {
-        ctx.strokeStyle = '#0f0';
-        ctx.fillStyle = '#0f0';
-        ctx.lineWidth = 2;
-        ctx.font = 'bold 14px Courier New';
-
-        // Center Reticle
-        ctx.beginPath();
-        ctx.arc(cx, cy, 10, 0, Math.PI*2);
-        ctx.moveTo(cx - 50, cy); ctx.lineTo(cx - 20, cy);
-        ctx.moveTo(cx + 20, cy); ctx.lineTo(cx + 50, cy);
-        ctx.stroke();
-
-        // Dynamic Text
-        ctx.fillText(`PTCH: ${Math.round(pitch/10)}°`, cx + 70, cy - 20);
-        ctx.fillText(`ROLL: ${Math.round(roll * 57.3)}°`, cx + 70, cy);
-    }
-
-    // --- Main Loop ---
 
     function draw() {
+        frame++;
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
-        
-        // Calculate physics based on mouse
         const roll = mouseX * 0.6;
         const pitch = mouseY * 400;
 
-        // 1. SKY (Background)
+        // 1. Sky
         const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
         sky.addColorStop(0, '#001a33');
-        sky.addColorStop(1, '#4facfe');
+        sky.addColorStop(1, '#5dade2');
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 2. TRANSFORMED WORLD
+        // 2. World Objects (Moving)
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(-roll);
         ctx.translate(0, pitch);
 
         // Ground
-        ctx.fillStyle = '#1b3a1b'; 
+        ctx.fillStyle = '#145a32'; 
         ctx.fillRect(-10000, 0, 20000, 10000);
 
-        // Objects (Sorted by Z to handle overlapping)
+        // Render Clouds and Ground Objects
         groundObjects.sort((a, b) => b.z - a.z);
         groundObjects.forEach(obj => {
-            const scale = 400 / (400 + obj.z); // Perspective formula
-            const xPos = obj.x * scale;
-            const yPos = obj.z * scale;
-
-            if (obj.type === 'house') drawHouse(xPos, yPos, 40 * scale, obj.color);
-            else drawTree(xPos, yPos, 50 * scale);
+            const scale = 500 / (500 + obj.z);
+            if (obj.type === 'house') {
+                ctx.fillStyle = obj.color;
+                ctx.fillRect(obj.x * scale - (20 * scale), obj.z * scale - (40 * scale), 40 * scale, 40 * scale);
+            } else {
+                ctx.fillStyle = '#1e8449';
+                ctx.beginPath();
+                ctx.arc(obj.x * scale, obj.z * scale - (30 * scale), 25 * scale, 0, Math.PI * 2);
+                ctx.fill();
+            }
         });
 
-        // Horizon Haze (Blurs the edge of the world)
-        const haze = ctx.createLinearGradient(0, 0, 0, 400);
-        haze.addColorStop(0, 'rgba(79, 172, 254, 1)');
-        haze.addColorStop(1, 'rgba(79, 172, 254, 0)');
-        ctx.fillStyle = haze;
-        ctx.fillRect(-5000, 0, 10000, 400);
+        clouds.forEach(c => drawCloud(c.x, c.y, c.z, c.size, pitch, roll));
 
         ctx.restore();
 
-        // 3. AIRPLANE NOSE (Static)
-        drawAirplaneNose(cx, cy);
+        // 3. Airplane Cockpit (Reacting)
+        drawAirplaneNose(cx, cy, roll, pitch);
 
-        // 4. HUD (Top Layer)
-        drawHUD(cx, cy, roll, pitch);
+        // 4. HUD
+        ctx.strokeStyle = '#0f0';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 10, 0, Math.PI*2);
+        ctx.stroke();
 
         requestAnimationFrame(draw);
     }
