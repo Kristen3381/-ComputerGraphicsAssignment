@@ -1,23 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pro Flight Sim - Laura's Build</title>
+    <title>Advanced Flight Sim - Realistic Lighting</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
+        body { margin: 0; overflow: hidden; background: #87CEEB; cursor: crosshair; }
         canvas { display: block; }
-        .stats {
-            position: absolute; top: 20px; right: 20px;
-            color: #0f0; text-align: right; pointer-events: none;
-            text-shadow: 0 0 5px #0f0;
-        }
     </style>
 </head>
 <body>
-    <div class="stats" id="ui">
-        ALT: 12,400 FT<br>
-        SPD: 340 KTS<br>
-        HDG: 270°
-    </div>
     <canvas id="flightCanvas"></canvas>
 
 <script>
@@ -25,12 +15,13 @@
     const ctx = canvas.getContext('2d');
     let mouseX = 0, mouseY = 0;
 
-    // Object types: 0 = House, 1 = Tree
-    const groundObjects = Array.from({ length: 40 }, () => ({
-        x: (Math.random() - 0.5) * 4000,
-        y: Math.random() * 2000,
-        type: Math.floor(Math.random() * 2),
-        color: `hsl(${100 + Math.random() * 40}, 30%, ${20 + Math.random() * 20}%)`
+    // Create a diverse set of real-life objects
+    const objects = Array.from({ length: 60 }, () => ({
+        x: (Math.random() - 0.5) * 5000,
+        z: Math.random() * 3000, // Using Z for depth
+        type: Math.random() > 0.4 ? 'tree' : 'building',
+        width: 20 + Math.random() * 40,
+        height: 30 + Math.random() * 60
     }));
 
     window.addEventListener('mousemove', (e) => {
@@ -45,38 +36,73 @@
     window.addEventListener('resize', resize);
     resize();
 
-    function drawHouse(x, y, size, color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(x - size/2, y - size, size, size); // Base
-        ctx.fillStyle = '#333';
-        ctx.beginPath(); // Roof
-        ctx.moveTo(x - size/1.8, y - size);
-        ctx.lineTo(x + size/1.8, y - size);
-        ctx.lineTo(x, y - size * 1.5);
-        ctx.fill();
-    }
-
-    function drawTree(x, y, size) {
-        ctx.fillStyle = '#4a2f1b';
-        ctx.fillRect(x - size/10, y - size/2, size/5, size/2); // Trunk
-        ctx.fillStyle = '#2d5a27';
+    function drawRealisticBuilding(x, y, w, h, scale) {
+        const shadowOffset = 15 * scale;
+        
+        // 1. Draw Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
-        ctx.arc(x, y - size, size/1.5, 0, Math.PI * 2); // Leaves
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + shadowOffset, y - shadowOffset);
+        ctx.lineTo(x + w + shadowOffset, y - shadowOffset);
+        ctx.lineTo(x + w, y);
+        ctx.fill();
+
+        // 2. Main Face (Lighter)
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(x, y - h, w, h);
+
+        // 3. Side Face (Darker Shading)
+        ctx.fillStyle = '#b0b0b0';
+        ctx.beginPath();
+        ctx.moveTo(x + w, y);
+        ctx.lineTo(x + w + 10 * scale, y - 10 * scale);
+        ctx.lineTo(x + w + 10 * scale, y - h - 10 * scale);
+        ctx.lineTo(x + w, y - h);
+        ctx.fill();
+
+        // 4. Roof
+        ctx.fillStyle = '#7c2d12'; // Brick red
+        ctx.beginPath();
+        ctx.moveTo(x, y - h);
+        ctx.lineTo(x + w, y - h);
+        ctx.lineTo(x + w + 10 * scale, y - h - 10 * scale);
+        ctx.lineTo(x + 10 * scale, y - h - 10 * scale);
         ctx.fill();
     }
 
-    function draw() {
+    function drawRealisticTree(x, y, size, scale) {
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(x + 10 * scale, y, 20 * scale, 10 * scale, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Trunk
+        ctx.fillStyle = '#45260a';
+        ctx.fillRect(x - (2 * scale), y - (15 * scale), 4 * scale, 15 * scale);
+
+        // Foliage (Gradient for sunlight)
+        const leafGrad = ctx.createRadialGradient(x - 5, y - 30 * scale, 0, x, y - 30 * scale, 25 * scale);
+        leafGrad.addColorStop(0, '#4ade80'); // Highlight
+        leafGrad.addColorStop(1, '#065f46'); // Deep forest green
+        ctx.fillStyle = leafGrad;
+        ctx.beginPath();
+        ctx.arc(x, y - 30 * scale, 25 * scale, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function render() {
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
-        const roll = mouseX * 0.6;
-        const pitch = mouseY * 450;
+        const roll = mouseX * 0.7;
+        const pitch = mouseY * 400;
 
-        // 1. Sky & Atmospheric Perspective
-        const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        skyGrad.addColorStop(0, '#001524');
-        skyGrad.addColorStop(0.5, '#1565C0');
-        skyGrad.addColorStop(1, '#64B5F6');
-        ctx.fillStyle = skyGrad;
+        // --- SKY ---
+        const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        sky.addColorStop(0, '#0c4a6e');
+        sky.addColorStop(1, '#7dd3fc');
+        ctx.fillStyle = sky;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         ctx.save();
@@ -84,60 +110,52 @@
         ctx.rotate(-roll);
         ctx.translate(0, pitch);
 
-        // 2. Ground Plane
-        ctx.fillStyle = '#1b3a1b'; 
-        ctx.fillRect(-5000, 0, 10000, 5000);
+        // --- GROUND ---
+        ctx.fillStyle = '#14532d'; // Deep Grass
+        ctx.fillRect(-10000, 0, 20000, 10000);
 
-        // 3. Render Real-Life Objects (Houses & Trees)
-        groundObjects.forEach(obj => {
-            // Distance scaling: objects further from horizon look smaller
-            const scale = Math.max(0.1, obj.y / 500); 
-            const screenX = obj.x;
-            const screenY = obj.y;
+        // Sort objects by Z (depth) so far ones are drawn first (Painter's Algorithm)
+        objects.sort((a, b) => a.z - b.z);
 
-            if (obj.type === 0) drawHouse(screenX, screenY, 30 * scale, obj.color);
-            else drawTree(screenX, screenY, 40 * scale);
+        objects.forEach(obj => {
+            // Perspective Math
+            const perspectiveScale = 400 / (400 + obj.z);
+            const xPos = obj.x * perspectiveScale;
+            const yPos = obj.z * perspectiveScale;
+
+            if (obj.type === 'building') {
+                drawRealisticBuilding(xPos, yPos, obj.width * perspectiveScale, obj.height * perspectiveScale, perspectiveScale);
+            } else {
+                drawRealisticTree(xPos, yPos, obj.width * perspectiveScale, perspectiveScale);
+            }
         });
 
-        // 4. Horizon Haze (Makes it look "Real")
-        const haze = ctx.createLinearGradient(0, -100, 0, 300);
-        haze.addColorStop(0, 'rgba(100, 181, 246, 1)');
-        haze.addColorStop(1, 'rgba(100, 181, 246, 0)');
+        // Atmospheric Haze Overlay
+        const haze = ctx.createLinearGradient(0, 0, 0, 500);
+        haze.addColorStop(0, 'rgba(125, 211, 252, 1)');
+        haze.addColorStop(1, 'rgba(125, 211, 252, 0)');
         ctx.fillStyle = haze;
-        ctx.fillRect(-5000, -100, 10000, 400);
+        ctx.fillRect(-5000, 0, 10000, 500);
 
         ctx.restore();
 
-        // 5. Functional HUD
-        drawHUD(cx, cy, roll, pitch);
+        // --- HUD ---
+        drawHUD(cx, cy);
 
-        requestAnimationFrame(draw);
+        requestAnimationFrame(render);
     }
 
-    function drawHUD(cx, cy, roll, pitch) {
-        ctx.strokeStyle = '#0f0';
-        ctx.fillStyle = '#0f0';
+    function drawHUD(cx, cy) {
+        ctx.strokeStyle = '#00ff00';
         ctx.lineWidth = 2;
-        ctx.font = '12px Courier New';
-
-        // Roll Indicator (Arc at the top)
         ctx.beginPath();
-        ctx.arc(cx, cy, 150, Math.PI + 0.5, Math.PI * 2 - 0.5);
+        ctx.arc(cx, cy, 100, 0, Math.PI * 2);
+        ctx.moveTo(cx - 120, cy); ctx.lineTo(cx - 80, cy);
+        ctx.moveTo(cx + 80, cy); ctx.lineTo(cx + 120, cy);
         ctx.stroke();
-
-        // Target Reticle
-        ctx.beginPath();
-        ctx.moveTo(cx - 20, cy); ctx.lineTo(cx - 5, cy);
-        ctx.moveTo(cx + 5, cy); ctx.lineTo(cx + 20, cy);
-        ctx.moveTo(cx, cy - 5); ctx.lineTo(cx, cy + 5);
-        ctx.stroke();
-
-        // Pitch Data
-        ctx.fillText(`PITCH: ${Math.round(pitch/10)}°`, cx + 60, cy - 60);
-        ctx.fillText(`ROLL:  ${Math.round(roll * 57.3)}°`, cx + 60, cy - 45);
     }
 
-    draw();
+    render();
 </script>
 </body>
 </html>
