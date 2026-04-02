@@ -1,22 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Airplane Pilot View - Cloudy Sky</title>
+    <title>Flight Simulator - Final Assignment Build</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; overflow: hidden; background: #4facfe; cursor: crosshair; }
         canvas { display: block; }
-        .hud-text {
-            position: absolute; top: 20px; left: 20px;
-            color: white; background: rgba(0,0,0,0.3);
-            padding: 10px; border-radius: 5px; pointer-events: none;
+        #overlay {
+            position: absolute; bottom: 20px; width: 100%;
+            text-align: center; color: rgba(255,255,255,0.7);
+            font-family: monospace; pointer-events: none;
         }
     </style>
 </head>
 <body>
-    <div class="hud-text">
-        <b>FLIGHT SYSTEM ACTIVE</b><br>
-        Pitch/Roll: Mouse Movement
-    </div>
+    <div id="overlay">INSTRUMENTS: ACTIVE | STATUS: STABLE</div>
     <canvas id="flightCanvas"></canvas>
 
 <script>
@@ -31,91 +28,116 @@
     }
     window.addEventListener('resize', resize);
     window.addEventListener('mousemove', (e) => {
+        // Normalize mouse to -1 to +1 range
         mouseX = (e.clientX / canvas.width) * 2 - 1;
         mouseY = (e.clientY / canvas.height) * 2 - 1;
     });
     resize();
 
-    // Cloud Object Logic
-    class Cloud {
-        constructor() {
-            this.reset();
-        }
-        reset() {
-            this.x = (Math.random() - 0.5) * canvas.width * 3;
-            this.y = (Math.random() - 0.5) * canvas.height * 2;
-            this.width = 150 + Math.random() * 200;
-            this.opacity = 0.3 + Math.random() * 0.5;
-        }
-        draw(ctx) {
-            ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
-            ctx.beginPath();
-            // Create a "fluffy" shape using multiple overlapping circles
-            ctx.arc(this.x, this.y, this.width/3, 0, Math.PI * 2);
-            ctx.arc(this.x + 40, this.y - 20, this.width/3.5, 0, Math.PI * 2);
-            ctx.arc(this.x + 80, this.y, this.width/3, 0, Math.PI * 2);
-            ctx.fill();
-        }
+    // Generate distant objects (stars/lights) for "depth"
+    const distantObjects = Array.from({ length: 80 }, () => ({
+        x: (Math.random() - 0.5) * 3000,
+        y: (Math.random() - 0.5) * 2000,
+        size: 1 + Math.random() * 2,
+        speedFactor: 0.4 + Math.random() * 0.8 // Different speeds for 2D depth
+    }));
+
+    // Function to draw a soft, realistic cloud
+    function drawCloud(x, y, radius) {
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        grad.addColorStop(0.6, 'rgba(255, 255, 255, 0.2)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
     }
 
-    const clouds = Array.from({ length: 15 }, () => new Cloud());
+    function animate() {
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
 
-    function draw() {
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const pitchOffset = mouseY * 300;
-        const rollAngle = mouseX * (Math.PI / 4);
+        // Controls
+        const roll = mouseX * 0.7; // Max ~40 degree roll
+        const pitch = mouseY * 500; // Vertical displacement
 
-        // 1. Draw the Sky Background (Static)
+        // 1. Draw Sky (Static Background)
         const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        skyGrad.addColorStop(0, '#1a73e8'); // Deep blue top
-        skyGrad.addColorStop(1, '#8ab4f8'); // Light blue horizon
+        skyGrad.addColorStop(0, '#0052D4');
+        skyGrad.addColorStop(1, '#6FB1FC');
         ctx.fillStyle = skyGrad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 2. Apply Transformations for World Objects (Clouds & Horizon)
+        // 2. Transform the "World" (Clouds, Ground, Objects)
         ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(-rollAngle);
-        ctx.translate(0, pitchOffset);
+        ctx.translate(cx, cy);
+        ctx.rotate(-roll);
+        ctx.translate(0, pitch);
 
-        // Draw Ground/Sea
-        ctx.fillStyle = '#0d47a1';
-        ctx.fillRect(-canvas.width * 2, 0, canvas.width * 4, canvas.height * 2);
+        // Draw the Ground (Darker blue/green for land/sea)
+        ctx.fillStyle = '#1e3c72';
+        // We draw a massive rectangle starting at the horizon line (y=0)
+        ctx.fillRect(-5000, 0, 10000, 5000);
 
-        // Draw Clouds
-        clouds.forEach(cloud => cloud.draw(ctx));
-        
+        // Draw the Horizon Glow
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-5000, 0); ctx.lineTo(5000, 0);
+        ctx.stroke();
+
+        // Draw "Real" Clouds
+        drawCloud(-600, -300, 200);
+        drawCloud(500, -150, 250);
+        drawCloud(100, -500, 180);
+        drawCloud(-200, 400, 220); // This cloud is "below" us
+
+        // Draw Distant Objects with Parallax
+        ctx.fillStyle = "white";
+        distantObjects.forEach(obj => {
+            // Apply unique pitch response to each object
+            const parallaxY = obj.y + (pitch * (obj.speedFactor - 1));
+            ctx.beginPath();
+            ctx.arc(obj.x, parallaxY, obj.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
         ctx.restore();
 
-        // 3. Draw Static HUD (Heads-Up Display)
-        drawHUD(centerX, centerY);
+        // 3. Draw Static Cockpit HUD (Doesn't move with the plane)
+        drawHUD(cx, cy);
 
-        requestAnimationFrame(draw);
+        requestAnimationFrame(animate);
     }
 
     function drawHUD(cx, cy) {
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
+        ctx.strokeStyle = '#00ff00';
         ctx.lineWidth = 2;
-        // Central Aim
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = '#00ff00';
+
+        // Center Aiming Reticle
         ctx.beginPath();
-        ctx.moveTo(cx - 30, cy); ctx.lineTo(cx - 10, cy);
-        ctx.moveTo(cx + 10, cy); ctx.lineTo(cx + 30, cy);
-        ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy + 10);
+        ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+        ctx.moveTo(cx - 40, cy); ctx.lineTo(cx - 15, cy);
+        ctx.moveTo(cx + 15, cy); ctx.lineTo(cx + 40, cy);
         ctx.stroke();
         
-        // Pitch Ladders (decorative)
-        for(let i = -2; i <= 2; i++) {
+        // Pitch Ladder Bars
+        for(let i = -3; i <= 3; i++) {
             if(i === 0) continue;
-            let yPos = cy + (i * 60);
+            let y = cy + (i * 80);
             ctx.beginPath();
-            ctx.moveTo(cx - 50, yPos); ctx.lineTo(cx - 30, yPos);
-            ctx.moveTo(cx + 30, yPos); ctx.lineTo(cx + 50, yPos);
+            ctx.moveTo(cx - 60, y); ctx.lineTo(cx - 30, y);
+            ctx.moveTo(cx + 30, y); ctx.lineTo(cx + 60, y);
             ctx.stroke();
         }
+        ctx.shadowBlur = 0;
     }
 
-    draw();
+    animate();
 </script>
 </body>
 </html>
