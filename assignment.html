@@ -1,17 +1,21 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Airplane Pilot View Simulator</title>
+    <title>Airplane Pilot View - Cloudy Sky</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; color: white; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; }
-        .instructions { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+        .hud-text {
+            position: absolute; top: 20px; left: 20px;
+            color: white; background: rgba(0,0,0,0.3);
+            padding: 10px; border-radius: 5px; pointer-events: none;
+        }
     </style>
 </head>
 <body>
-    <div class="instructions">
-        Move Mouse Up/Down: Pitch<br>
-        Move Mouse Left/Right: Roll
+    <div class="hud-text">
+        <b>FLIGHT SYSTEM ACTIVE</b><br>
+        Pitch/Roll: Mouse Movement
     </div>
     <canvas id="flightCanvas"></canvas>
 
@@ -19,84 +23,96 @@
     const canvas = document.getElementById('flightCanvas');
     const ctx = canvas.getContext('2d');
 
-    let mouseX = 0;
-    let mouseY = 0;
+    let mouseX = 0, mouseY = 0;
 
-    // Set canvas size
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
     }
     window.addEventListener('resize', resize);
-    resize();
-
-    // Track mouse movement
     window.addEventListener('mousemove', (e) => {
-        // Normalize mouse positions to range -1 to 1
         mouseX = (e.clientX / canvas.width) * 2 - 1;
         mouseY = (e.clientY / canvas.height) * 2 - 1;
     });
+    resize();
 
-    // Create some "distant objects" (stars/points)
-    const objects = [];
-    for(let i = 0; i < 100; i++) {
-        objects.push({
-            x: (Math.random() - 0.5) * canvas.width * 2,
-            y: (Math.random() - 0.5) * canvas.height * 2
-        });
+    // Cloud Object Logic
+    class Cloud {
+        constructor() {
+            this.reset();
+        }
+        reset() {
+            this.x = (Math.random() - 0.5) * canvas.width * 3;
+            this.y = (Math.random() - 0.5) * canvas.height * 2;
+            this.width = 150 + Math.random() * 200;
+            this.opacity = 0.3 + Math.random() * 0.5;
+        }
+        draw(ctx) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+            ctx.beginPath();
+            // Create a "fluffy" shape using multiple overlapping circles
+            ctx.arc(this.x, this.y, this.width/3, 0, Math.PI * 2);
+            ctx.arc(this.x + 40, this.y - 20, this.width/3.5, 0, Math.PI * 2);
+            ctx.arc(this.x + 80, this.y, this.width/3, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
+    const clouds = Array.from({ length: 15 }, () => new Cloud());
+
     function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
+        const pitchOffset = mouseY * 300;
+        const rollAngle = mouseX * (Math.PI / 4);
 
-        // Pitch effect: vertical offset
-        const pitchOffset = mouseY * 200;
-        
-        // Roll effect: rotation angle (in radians)
-        const rollAngle = mouseX * (Math.PI / 4); // Max 45 degree roll
+        // 1. Draw the Sky Background (Static)
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        skyGrad.addColorStop(0, '#1a73e8'); // Deep blue top
+        skyGrad.addColorStop(1, '#8ab4f8'); // Light blue horizon
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // 2. Apply Transformations for World Objects (Clouds & Horizon)
         ctx.save();
-        
-        // 1. Move to center to rotate around pilot's view
         ctx.translate(centerX, centerY);
-        
-        // 2. Apply Roll (Rotation)
-        // We rotate -rollAngle because if the plane rolls right, 
-        // the horizon appears to tilt left.
         ctx.rotate(-rollAngle);
-
-        // 3. Apply Pitch (Translation)
         ctx.translate(0, pitchOffset);
 
-        // Draw the horizon line
-        ctx.strokeStyle = '#00ff00';
-        ctx.beginPath();
-        ctx.moveTo(-canvas.width, 0);
-        ctx.lineTo(canvas.width, 0);
-        ctx.stroke();
+        // Draw Ground/Sea
+        ctx.fillStyle = '#0d47a1';
+        ctx.fillRect(-canvas.width * 2, 0, canvas.width * 4, canvas.height * 2);
 
-        // Draw distant objects
-        ctx.fillStyle = 'white';
-        objects.forEach(obj => {
-            ctx.beginPath();
-            ctx.arc(obj.x, obj.y, 2, 0, Math.PI * 2);
-            ctx.fill();
-        });
-
+        // Draw Clouds
+        clouds.forEach(cloud => cloud.draw(ctx));
+        
         ctx.restore();
 
-        // Draw a static HUD (Heads-Up Display) crosshair
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(centerX - 20, centerY); ctx.lineTo(centerX + 20, centerY);
-        ctx.moveTo(centerX, centerY - 20); ctx.lineTo(centerX, centerY + 20);
-        ctx.stroke();
+        // 3. Draw Static HUD (Heads-Up Display)
+        drawHUD(centerX, centerY);
 
         requestAnimationFrame(draw);
+    }
+
+    function drawHUD(cx, cy) {
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
+        ctx.lineWidth = 2;
+        // Central Aim
+        ctx.beginPath();
+        ctx.moveTo(cx - 30, cy); ctx.lineTo(cx - 10, cy);
+        ctx.moveTo(cx + 10, cy); ctx.lineTo(cx + 30, cy);
+        ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy + 10);
+        ctx.stroke();
+        
+        // Pitch Ladders (decorative)
+        for(let i = -2; i <= 2; i++) {
+            if(i === 0) continue;
+            let yPos = cy + (i * 60);
+            ctx.beginPath();
+            ctx.moveTo(cx - 50, yPos); ctx.lineTo(cx - 30, yPos);
+            ctx.moveTo(cx + 30, yPos); ctx.lineTo(cx + 50, yPos);
+            ctx.stroke();
+        }
     }
 
     draw();
