@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Advanced Flight Sim - Laura's Build</title>
+    <title>Advanced Flight Sim - Laura and Alvin's Build</title>
     <style>
+        /* This section makes the app full-screen and hides boring scrollbars */
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; cursor: crosshair; }
         canvas { display: block; }
+        /* This positions our green text data (SPD, ALT) in the top-right corner */
         .stats {
             position: absolute; top: 20px; right: 20px;
             color: #0f0; text-align: right; pointer-events: none;
@@ -21,77 +23,88 @@
     <canvas id="flightCanvas"></canvas>
 
 <script>
+    // Getting our drawing tools ready
     const canvas = document.getElementById('flightCanvas');
-    const ctx = canvas.getContext('2d');
-    let mouseX = 0, mouseY = 0;
-    let frame = 0;
+    const ctx = canvas.getContext('2d'); // This is like picking up our paintbrush
+    let mouseX = 0, mouseY = 0; // These store where your mouse is
+    let frame = 0; // A counter that keeps ticking to handle animations
 
-    // Generate random objects and clouds
+    // GENERATING THE WORLD:
+    // We create 40 random objects on the ground (Trees and Houses) [cite: 672]
     const groundObjects = Array.from({ length: 40 }, () => ({
-        x: (Math.random() - 0.5) * 5000,
-        z: Math.random() * 3000,
+        x: (Math.random() - 0.5) * 5000, // Random left/right position
+        z: Math.random() * 3000,         // Depth: how far away they start [cite: 787]
         type: Math.random() > 0.4 ? 'tree' : 'house',
         color: `hsl(${20 + Math.random() * 20}, 30%, ${25 + Math.random() * 15}%)`
     }));
 
+    // We create 10 random clouds high in the sky
     const clouds = Array.from({ length: 10 }, () => ({
         x: (Math.random() - 0.5) * 4000,
-        y: -200 - Math.random() * 500,
-        z: Math.random() * 2000,
+        y: -200 - Math.random() * 500, // Negative Y means "Up" in canvas coordinates
+        z: Math.random() * 2000,         // Depth for the clouds
         size: 150 + Math.random() * 200
     }));
 
+    // MOUSE LOGIC:
+    // This turns your mouse position into numbers from -1 to 1 [cite: 1061]
     window.addEventListener('mousemove', (e) => {
-        mouseX = (e.clientX / canvas.width) * 2 - 1;
-        mouseY = (e.clientY / canvas.height) * 2 - 1;
+        mouseX = (e.clientX / canvas.width) * 2 - 1; // -1 = far left, 1 = far right
+        mouseY = (e.clientY / canvas.height) * 2 - 1; // -1 = top, 1 = bottom
     });
 
+    // SCREEN RESIZING:
+    // If you stretch the window, this makes sure the "paper" stretches with it [cite: 1079]
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
     }
     window.addEventListener('resize', resize);
-    resize();
+    resize(); // Run it once at the start to set the size
 
+    // DRAWING A CLOUD:
     function drawCloud(x, y, z, size, pitch, roll) {
+        // PERSPECTIVE: The further away (z), the smaller the cloud looks [cite: 846, 848]
         const scale = 500 / (500 + z);
         const screenX = x * scale;
         const screenY = y * scale;
         
+        // SHADING: Makes the cloud look "puffy" with a soft glow [cite: 1317]
         const grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, size * scale);
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
-        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.4)'); // White in center
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');   // Fades out to nothing
         
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(screenX, screenY, size * scale, 0, Math.PI * 2);
+        ctx.arc(screenX, screenY, size * scale, 0, Math.PI * 2); // Draw the circle [cite: 130]
         ctx.fill();
     }
 
+    // DRAWING THE PLANE'S NOSE:
     function drawAirplaneNose(cx, cy, roll, pitch) {
-        // Simulating the plane "reacting" to the pilot's input
-        // The nose shifts slightly opposite to the movement
+        // REACTION: The nose shifts slightly to show the plane is moving
         const recoilX = roll * 20; 
         const recoilY = (pitch / 400) * 30;
-        const vibration = Math.sin(frame * 0.5) * 1.5; // Engine shake
+        const vibration = Math.sin(frame * 0.5) * 1.5; // Tiny shake to simulate the engine [cite: 2589]
 
         const noseW = 450;
+        // GRADIENT: Makes the plane look like it's made of metal [cite: 1269]
         const metalGrad = ctx.createLinearGradient(cx - noseW/2 + recoilX, 0, cx + noseW/2 + recoilX, 0);
         metalGrad.addColorStop(0, '#1c2833');
-        metalGrad.addColorStop(0.5, '#7f8c8d');
+        metalGrad.addColorStop(0.5, '#7f8c8d'); // Shiny metallic highlight
         metalGrad.addColorStop(1, '#1c2833');
 
-        ctx.save();
-        ctx.translate(recoilX, recoilY + vibration);
+        ctx.save(); // Remember where we are
+        ctx.translate(recoilX, recoilY + vibration); // Move the nose based on flight movement
 
-        // Exterior Nose
+        // The outer part of the plane (Exterior Nose)
         ctx.fillStyle = metalGrad;
         ctx.beginPath();
         ctx.moveTo(cx - noseW/2, canvas.height);
         ctx.quadraticCurveTo(cx, cy + 180, cx + noseW/2, canvas.height);
         ctx.fill();
 
-        // Interior Dash
+        // The black dashboard inside (Interior Dash)
         ctx.fillStyle = '#0a0a0a';
         ctx.beginPath();
         ctx.moveTo(-100, canvas.height);
@@ -100,66 +113,69 @@
         ctx.lineTo(canvas.width + 100, canvas.height);
         ctx.fill();
         
-        ctx.restore();
+        ctx.restore(); // Go back to normal coordinates
     }
 
+    // THE MAIN DRAWING LOOP (Runs 60 times per second):
     function draw() {
         frame++;
-        const cx = canvas.width / 2;
+        const cx = canvas.width / 2; // Find the center of the screen
         const cy = canvas.height / 2;
-        const roll = mouseX * 0.6;
-        const pitch = mouseY * 400;
+        const roll = mouseX * 0.6;   // How much we are tilting [cite: 275]
+        const pitch = mouseY * 400; // How much we are nodding up/down [cite: 274]
 
-        // 1. Sky
+        // 1. DRAW SKY: A dark-to-light blue fade
         const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
         sky.addColorStop(0, '#001a33');
         sky.addColorStop(1, '#5dade2');
         ctx.fillStyle = sky;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, canvas.width, canvas.height); // "Clear" screen by drawing sky over it [cite: 1219]
 
-        // 2. World Objects (Moving)
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(-roll);
-        ctx.translate(0, pitch);
+        // 2. TRANSFORM THE WORLD:
+        ctx.save(); 
+        ctx.translate(cx, cy); // Move drawing point to center [cite: 413]
+        ctx.rotate(-roll);     // ROLL: Tilt the world the opposite way you move the mouse [cite: 418]
+        ctx.translate(0, pitch); // PITCH: Slide the world up/down [cite: 416]
 
-        // Ground
+        // GROUND: A massive green rectangle [cite: 219]
         ctx.fillStyle = '#145a32'; 
         ctx.fillRect(-10000, 0, 20000, 10000);
 
-        // Render Clouds and Ground Objects
+        // PAINTER'S ALGORITHM: Draw far objects first so near ones go on top [cite: 1161, 1163]
         groundObjects.sort((a, b) => b.z - a.z);
         groundObjects.forEach(obj => {
-            const scale = 500 / (500 + obj.z);
+            const scale = 500 / (500 + obj.z); // Perspective scaling [cite: 1111]
             if (obj.type === 'house') {
                 ctx.fillStyle = obj.color;
                 ctx.fillRect(obj.x * scale - (20 * scale), obj.z * scale - (40 * scale), 40 * scale, 40 * scale);
             } else {
-                ctx.fillStyle = '#1e8449';
+                ctx.fillStyle = '#1e8449'; // Tree color
                 ctx.beginPath();
                 ctx.arc(obj.x * scale, obj.z * scale - (30 * scale), 25 * scale, 0, Math.PI * 2);
                 ctx.fill();
             }
         });
 
+        // Draw each cloud using our perspective function
         clouds.forEach(c => drawCloud(c.x, c.y, c.z, c.size, pitch, roll));
 
-        ctx.restore();
+        ctx.restore(); // Stop tilting/sliding the world
 
-        // 3. Airplane Cockpit (Reacting)
+        // 3. DRAW THE COCKPIT: This stays fixed while the world moves
         drawAirplaneNose(cx, cy, roll, pitch);
 
-        // 4. HUD
+        // 4. DRAW THE CROSSHAIR (HUD): The green circle in the middle
         ctx.strokeStyle = '#0f0';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(cx, cy, 10, 0, Math.PI*2);
         ctx.stroke();
 
+        // Tell the browser to run this "draw" function again for the next frame
         requestAnimationFrame(draw);
     }
 
-    draw();
+    draw(); // Start the engines!
 </script>
 </body>
 </html>
