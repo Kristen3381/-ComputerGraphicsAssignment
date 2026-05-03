@@ -1,181 +1,188 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Advanced Flight Sim - Laura and Alvin's Build</title>
-    <style>
-        /* This section makes the app full-screen and hides boring scrollbars */
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; cursor: crosshair; }
-        canvas { display: block; }
-        /* This positions our green text data (SPD, ALT) in the top-right corner */
-        .stats {
-            position: absolute; top: 20px; right: 20px;
-            color: #0f0; text-align: right; pointer-events: none;
-            text-shadow: 0 0 5px #0f0; font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>3D Chase View - Pilot Simulation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, sans-serif; cursor: crosshair; }
+    canvas { display: block; }
+    #hud {
+      position: absolute; top: 20px; left: 20px;
+      color: #00ff00; pointer-events: none;
+      text-shadow: 1px 1px 2px #000; font-size: 16px; font-weight: bold;
+    }
+  </style>
 </head>
 <body>
-    <div class="stats" id="ui">
-        ALT: 12,400 FT<br>
-        SPD: 340 KTS<br>
-        HDG: 270°
-    </div>
-    <canvas id="flightCanvas"></canvas>
+
+  <div id="hud">
+    FLIGHT SYSTEM: ACTIVE<br>
+    <span id="pR">PITCH: +0.0°</span><br>
+    <span id="rR">ROLL:  +0.0°</span>
+  </div>
+
+  <canvas id="c"></canvas>
 
 <script>
-    // Getting our drawing tools ready
-    const canvas = document.getElementById('flightCanvas');
-    const ctx = canvas.getContext('2d'); // This is like picking up our paintbrush
-    let mouseX = 0, mouseY = 0; // These store where your mouse is
-    let frame = 0; // A counter that keeps ticking to handle animations
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
 
-    // GENERATING THE WORLD:
-    // We create 40 random objects on the ground (Trees and Houses) [cite: 672]
-    const groundObjects = Array.from({ length: 40 }, () => ({
-        x: (Math.random() - 0.5) * 5000, // Random left/right position
-        z: Math.random() * 3000,         // Depth: how far away they start [cite: 787]
-        type: Math.random() > 0.4 ? 'tree' : 'house',
-        color: `hsl(${20 + Math.random() * 20}, 30%, ${25 + Math.random() * 15}%)`
-    }));
+let width, height;
+function resize() {
+  width = canvas.width = window.innerWidth;
+  height = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
 
-    // We create 10 random clouds high in the sky
-    const clouds = Array.from({ length: 10 }, () => ({
-        x: (Math.random() - 0.5) * 4000,
-        y: -200 - Math.random() * 500, // Negative Y means "Up" in canvas coordinates
-        z: Math.random() * 2000,         // Depth for the clouds
-        size: 150 + Math.random() * 200
-    }));
+/* --- 1. SETTINGS --- */
+const FOV = 700;           // Controls the "lens" depth
+const MAX_PITCH = 0.5;     // Limit how much we can look up/down
+const MAX_ROLL = 0.8;      // Limit how much we can tilt
+let mouseX = width / 2, mouseY = height / 2;
 
-    // MOUSE LOGIC:
-    // This turns your mouse position into numbers from -1 to 1 [cite: 1061]
-    window.addEventListener('mousemove', (e) => {
-        mouseX = (e.clientX / canvas.width) * 2 - 1; // -1 = far left, 1 = far right
-        mouseY = (e.clientY / canvas.height) * 2 - 1; // -1 = top, 1 = bottom
-    });
+window.addEventListener('mousemove', e => { 
+  mouseX = e.clientX; 
+  mouseY = e.clientY; 
+});
 
-    // SCREEN RESIZING:
-    // If you stretch the window, this makes sure the "paper" stretches with it [cite: 1079]
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resize);
-    resize(); // Run it once at the start to set the size
+/* --- 2. 3D CALCULATION MATH --- */
+// These functions move points around an axis to simulate tilting
+function rotateX(p, angle) {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  return { x: p.x, y: p.y * cos - p.z * sin, z: p.y * sin + p.z * cos };
+}
 
-    // DRAWING A CLOUD:
-    function drawCloud(x, y, z, size, pitch, roll) {
-        // PERSPECTIVE: The further away (z), the smaller the cloud looks [cite: 846, 848]
-        const scale = 500 / (500 + z);
-        const screenX = x * scale;
-        const screenY = y * scale;
-        
-        // SHADING: Makes the cloud look "puffy" with a soft glow [cite: 1317]
-        const grad = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, size * scale);
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.4)'); // White in center
-        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');   // Fades out to nothing
-        
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, size * scale, 0, Math.PI * 2); // Draw the circle [cite: 130]
-        ctx.fill();
-    }
+function rotateZ(p, angle) {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  return { x: p.x * cos - p.y * sin, y: p.x * sin + p.z * cos, z: p.z };
+}
 
-    // DRAWING THE PLANE'S NOSE:
-    function drawAirplaneNose(cx, cy, roll, pitch) {
-        // REACTION: The nose shifts slightly to show the plane is moving
-        const recoilX = roll * 20; 
-        const recoilY = (pitch / 400) * 30;
-        const vibration = Math.sin(frame * 0.5) * 1.5; // Tiny shake to simulate the engine [cite: 2589]
+// Converts 3D (x,y,z) coordinates to 2D (x,y) screen pixels
+function project(p) {
+  const scale = FOV / (p.z + 1000); 
+  return {
+    x: width / 2 + p.x * scale,
+    y: height / 2 + p.y * scale,
+    scale: scale
+  };
+}
 
-        const noseW = 450;
-        // GRADIENT: Makes the plane look like it's made of metal [cite: 1269]
-        const metalGrad = ctx.createLinearGradient(cx - noseW/2 + recoilX, 0, cx + noseW/2 + recoilX, 0);
-        metalGrad.addColorStop(0, '#1c2833');
-        metalGrad.addColorStop(0.5, '#7f8c8d'); // Shiny metallic highlight
-        metalGrad.addColorStop(1, '#1c2833');
+/* --- 3. THE WORLD OBJECTS --- */
+// Randomly placed clouds
+const clouds = Array.from({length: 15}, () => ({
+  x: Math.random() * 6000 - 3000,
+  y: Math.random() * -1200 - 400,
+  z: Math.random() * 5000,
+  size: Math.random() * 250 + 150
+}));
 
-        ctx.save(); // Remember where we are
-        ctx.translate(recoilX, recoilY + vibration); // Move the nose based on flight movement
+// "Images" on the ground (represented as textured patches/fields)
+const groundPatches = Array.from({length: 40}, () => ({
+  x: Math.random() * 8000 - 4000,
+  z: Math.random() * 8000,
+  w: Math.random() * 400 + 200,
+  h: Math.random() * 400 + 200,
+  color: `rgb(20, ${Math.random()*50 + 80}, 20)` // different shades of green
+}));
 
-        // The outer part of the plane (Exterior Nose)
-        ctx.fillStyle = metalGrad;
-        ctx.beginPath();
-        ctx.moveTo(cx - noseW/2, canvas.height);
-        ctx.quadraticCurveTo(cx, cy + 180, cx + noseW/2, canvas.height);
-        ctx.fill();
+/* --- 4. THE AIRPLANE MODEL --- */
+// We use arrays of points to define the "Shell" of each part
+const planeModel = {
+  // The main tube of the plane
+  body: [ {x:0, y:0, z:80}, {x:25, y:20, z:0}, {x:0, y:15, z:-180}, {x:-25, y:20, z:0} ],
+  // Large flat triangles for wings
+  wingL: [ {x:0, y:0, z:20}, {x:-200, y:10, z:-40}, {x:-200, y:10, z:-80}, {x:0, y:0, z:-40} ],
+  wingR: [ {x:0, y:0, z:20}, {x:200, y:10, z:-40}, {x:200, y:10, z:-80}, {x:0, y:0, z:-40} ],
+  // Tail fins
+  tailV: [ {x:0, y:0, z:-140}, {x:0, y:-70, z:-180}, {x:0, y:0, z:-170} ],
+  tailH: [ {x:-70, y:0, z:-170}, {x:70, y:0, z:-170}, {x:0, y:0, z:-140} ]
+};
 
-        // The black dashboard inside (Interior Dash)
-        ctx.fillStyle = '#0a0a0a';
-        ctx.beginPath();
-        ctx.moveTo(-100, canvas.height);
-        ctx.lineTo(-100, canvas.height - 120);
-        ctx.quadraticCurveTo(cx, canvas.height - 160, canvas.width + 100, canvas.height - 120);
-        ctx.lineTo(canvas.width + 100, canvas.height);
-        ctx.fill();
-        
-        ctx.restore(); // Go back to normal coordinates
-    }
+// Helper function to draw the 3D parts
+function drawShape(points, color, pitch, roll, offsetZ) {
+  const projected = points.map(p => {
+    let r = rotateZ(p, roll);    // Apply banking (left/right)
+    r = rotateX(r, pitch);       // Apply nose up/down
+    r.z += offsetZ;              // Move it in front of the camera
+    return project(r);
+  });
 
-    // THE MAIN DRAWING LOOP (Runs 60 times per second):
-    function draw() {
-        frame++;
-        const cx = canvas.width / 2; // Find the center of the screen
-        const cy = canvas.height / 2;
-        const roll = mouseX * 0.6;   // How much we are tilting [cite: 275]
-        const pitch = mouseY * 400; // How much we are nodding up/down [cite: 274]
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(projected[0].x, projected[0].y);
+  for(let i=1; i<projected.length; i++) ctx.lineTo(projected[i].x, projected[i].y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)"; // Add slight outlines for depth
+  ctx.stroke();
+}
 
-        // 1. DRAW SKY: A dark-to-light blue fade
-        const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        sky.addColorStop(0, '#001a33');
-        sky.addColorStop(1, '#5dade2');
-        ctx.fillStyle = sky;
-        ctx.fillRect(0, 0, canvas.width, canvas.height); // "Clear" screen by drawing sky over it [cite: 1219]
+/* --- 5. THE ANIMATION LOOP --- */
+function draw() {
+  // Calculate movement based on mouse
+  const targetRoll = ((mouseX / width) - 0.5) * 2 * MAX_ROLL;
+  const targetPitch = ((mouseY / height) - 0.5) * 2 * MAX_PITCH;
 
-        // 2. TRANSFORM THE WORLD:
-        ctx.save(); 
-        ctx.translate(cx, cy); // Move drawing point to center [cite: 413]
-        ctx.rotate(-roll);     // ROLL: Tilt the world the opposite way you move the mouse [cite: 418]
-        ctx.translate(0, pitch); // PITCH: Slide the world up/down [cite: 416]
+  // Draw Sky (Gradient)
+  const sky = ctx.createLinearGradient(0, 0, 0, height);
+  sky.addColorStop(0, "#1a75ff");
+  sky.addColorStop(1, "#80b3ff");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, width, height);
 
-        // GROUND: A massive green rectangle [cite: 219]
-        ctx.fillStyle = '#145a32'; 
-        ctx.fillRect(-10000, 0, 20000, 10000);
+  // Draw Ground & Ground Features
+  const horizon = height / 2 + (targetPitch * 300);
+  ctx.fillStyle = "#1e5d2f"; // Dark base grass
+  ctx.fillRect(0, horizon, width, height);
 
-        // PAINTER'S ALGORITHM: Draw far objects first so near ones go on top [cite: 1161, 1163]
-        groundObjects.sort((a, b) => b.z - a.z);
-        groundObjects.forEach(obj => {
-            const scale = 500 / (500 + obj.z); // Perspective scaling [cite: 1111]
-            if (obj.type === 'house') {
-                ctx.fillStyle = obj.color;
-                ctx.fillRect(obj.x * scale - (20 * scale), obj.z * scale - (40 * scale), 40 * scale, 40 * scale);
-            } else {
-                ctx.fillStyle = '#1e8449'; // Tree color
-                ctx.beginPath();
-                ctx.arc(obj.x * scale, obj.z * scale - (30 * scale), 25 * scale, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        });
+  // Draw Ground Patches (Fields)
+  groundPatches.forEach(g => {
+    g.z -= 15; if(g.z < -500) g.z = 7500; // Loop them back to the horizon
+    const p = project({x: g.x, y: 800 + (targetPitch * 1000), z: g.z});
+    ctx.fillStyle = g.color;
+    ctx.fillRect(p.x, p.y, g.w * p.scale, g.h * p.scale);
+  });
 
-        // Draw each cloud using our perspective function
-        clouds.forEach(c => drawCloud(c.x, c.y, c.z, c.size, pitch, roll));
+  // Draw Clouds (Semi-transparent)
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  clouds.forEach(c => {
+    c.z -= 10; if(c.z < -500) c.z = 4500;
+    const p = project({x: c.x, y: c.y + (targetPitch * 800), z: c.z});
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, c.size * p.scale, 0, Math.PI * 2);
+    ctx.fill();
+  });
 
-        ctx.restore(); // Stop tilting/sliding the world
+  // Draw the Airplane (Colored and Large)
+  const planeZ = 150; // Camera distance from plane
+  drawShape(planeModel.wingL, "#ffcc00", targetPitch, targetRoll, planeZ); // Yellow Wings
+  drawShape(planeModel.wingR, "#ffcc00", targetPitch, targetRoll, planeZ);
+  drawShape(planeModel.tailH, "#e6b800", targetPitch, targetRoll, planeZ);
+  drawShape(planeModel.tailV, "#ffdd33", targetPitch, targetRoll, planeZ);
+  drawShape(planeModel.body,  "#ffffff", targetPitch, targetRoll, planeZ); // White Body
 
-        // 3. DRAW THE COCKPIT: This stays fixed while the world moves
-        drawAirplaneNose(cx, cy, roll, pitch);
+  // Update HUD
+  document.getElementById('pR').textContent = 'PITCH: ' + (-targetPitch * 180 / Math.PI).toFixed(1) + '°';
+  document.getElementById('rR').textContent = 'ROLL:  ' + (targetRoll * 180 / Math.PI).toFixed(1) + '°';
 
-        // 4. DRAW THE CROSSHAIR (HUD): The green circle in the middle
-        ctx.strokeStyle = '#0f0';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 10, 0, Math.PI*2);
-        ctx.stroke();
+  requestAnimationFrame(draw);
+}
 
-        // Tell the browser to run this "draw" function again for the next frame
-        requestAnimationFrame(draw);
-    }
-
-    draw(); // Start the engines!
+draw();
+/* 
+  1. PRIMITIVES: 
+     - Paths/Polygons = Airplane Shell (Wings/Body)
+     - Arcs = Clouds
+     - Rectangles = Terrain/Sky
+  2. EVENT LISTENERS:
+     - mousemove: Captures pilot input to calculate Pitch/Roll.
+     - resize: Keeps the simulation responsive to any screen size.
+  3. 3D LOGIC:
+     - Rotation: Spins the 3D points in virtual space.
+     - Projection: Scales points to 2D pixels to create depth (Chase Cam).
+*/
 </script>
 </body>
 </html>
